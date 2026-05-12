@@ -1,6 +1,8 @@
-realcar_path: /nas/users/hyzhou/PAMI2024/release/3DRealCar
-model_base: /nas/users/hyzhou/PAMI2024/release/ss/scenes/pandaset
-uniad_path: /nas/users/hyzhou/code/UniAD_Sim/tools/e2e.sh
-vad_path: /nas/users/hyzhou/code/VAD_Sim/tools/e2e.sh
-ltf_path: /nas/users/hyzhou/code/navsim/ltf_e2e.sh
-output_dir: /nas/users/hyzhou/PAMI2024/release/outputs/benchmark/out/pandaset_
+realcar_path: /home/yyin5/mack/datasets_mack_raw/HUGSIM-public/3DRealCar
+model_base: /home/yyin5/mack/datasets_mack_raw/HUGSIM-public/ss/scenes/pandaset
+uniad_path: /home/yyin5/workspace/UniAD_SIM/tools/e2e.sh
+vad_path: /home/yyin5/workspace/VAD_SIM/tools/e2e.sh
+ltf_path: /home/yyin5/workspace/NAVSIM/ltf_e2e.sh
+dynamo_path: /home/yyin5/workspace/NAVSIM/dynamo_e2e.sh
+gtrs_path: /home/yyin5/workspace/NAVSIM/gtrs_e2e.sh
+output_dir: /home/yyin5/mack/yyin5/HUGSIM/outputs/benchmark_new/pandaset_

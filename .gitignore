@@ -13,3 +13,4 @@ apex
 # pixi environments
 .pixi
 *.egg-info
+data/data*

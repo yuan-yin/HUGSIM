@@ -9,7 +9,7 @@ def launch(shell_path, cuda_id, output):
     print(shell_path, cuda_id, output)
     with open(os.path.join(output, 'output.txt'), 'w') as f:
         process = subprocess.Popen(
-            ["zsh", shell_path, cuda_id, output], stdout=f, stderr=f
+            ["bash", shell_path, cuda_id, output], stdout=f, stderr=f
         )
     return process
 

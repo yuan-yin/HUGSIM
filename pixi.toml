@@ -16,8 +16,8 @@ setuptools = "==78.1.0"
 no-build-isolation = ["gsplat", "pytorch3d", "tinycudann", "simple-knn"]
 
 [pypi-dependencies]
-torch = { version = "==2.4.1", index = "https://download.pytorch.org/whl/cu118" }
-torchvision = { version = "==0.19.1", index = "https://download.pytorch.org/whl/cu118"}
+torch = { version = "==2.4.1", index = "https://download.pytorch.org/whl/cu124" }
+torchvision = { version = "==0.19.1", index = "https://download.pytorch.org/whl/cu124"}
 torchmetrics = ">=1.7.1, <2"
 roma = ">=1.5.2.1, <2"
 matplotlib = ">=3.10.1, <4"
