@@ -50,24 +50,51 @@ def create_cam(intrinsic, c2w):
                 image=np.zeros((h, w, 3)), image_name='')
     return cam
 
-def traj2control(plan_traj, info):
+def traj2control(plan_traj, info, plan_dt=0.5, sim_dt=None):
     """
         The input plan trajectory is under lidar coordinates
         x to right, y to forward and z to upward
+
+        plan_dt: time spacing between consecutive waypoints of plan_traj.
+        sim_dt: interval the returned command is applied for by the simulator. The tracker has to
+            run at this discretization, otherwise it optimizes a command for a horizon step that is
+            longer (or shorter) than the one actually executed, and tracking lags systematically.
+            When it differs from plan_dt the reference is resampled onto the simulator's timeline.
+            Defaults to plan_dt.
     """
-    plan_traj_stats = np.zeros((plan_traj.shape[0]+1, 5))
-    plan_traj_stats[1:, :2] = plan_traj[:, [1,0]]
-    prev_a, prev_b = 0.0, 0.0
-    for i, (b, a) in enumerate(plan_traj):
-        rot = np.arctan2(b - prev_b, a - prev_a)
+    if sim_dt is None:
+        sim_dt = plan_dt
+
+    # plan_traj columns are (right, forward); the tracker's state frame is (forward, right), which
+    # is what the [1, 0] swap below is for. Row 0 is the current pose at the origin, row k the pose
+    # at time k * plan_dt.
+    ref_fr = np.zeros((plan_traj.shape[0] + 1, 2))  # columns: (forward, right)
+    ref_fr[1:] = plan_traj[:, [1, 0]]
+    ref_t = np.arange(ref_fr.shape[0]) * plan_dt
+
+    if abs(sim_dt - plan_dt) > 1e-9:
+        # Resample onto the simulator's timeline, keeping the same horizon length.
+        n_steps = int(ref_t[-1] / sim_dt)
+        sample_t = np.arange(n_steps + 1) * sim_dt
+        ref_fr = np.stack(
+            [np.interp(sample_t, ref_t, ref_fr[:, 0]), np.interp(sample_t, ref_t, ref_fr[:, 1])],
+            axis=1,
+        )
+
+    plan_traj_stats = np.zeros((ref_fr.shape[0], 5))
+    plan_traj_stats[:, :2] = ref_fr
+    prev_fwd, prev_right = ref_fr[0]
+    for i, (fwd, right) in enumerate(ref_fr[1:]):
+        # Heading in the tracker frame: atan2(lateral, longitudinal).
+        rot = np.arctan2(right - prev_right, fwd - prev_fwd)
         rot = np.where(rot > np.pi/2, rot - np.pi, rot)
         rot = np.where(rot < -np.pi/2, rot + np.pi, rot)
         plan_traj_stats[i+1, 2] = rot
-        prev_a, prev_b = a, b
+        prev_fwd, prev_right = fwd, right
     curr_stat = np.array(
         [0.0, 0.0, 0.0, info['ego_velo'], info['ego_steer']]
     )
-    acc, steer_rate = plan2control(plan_traj_stats, curr_stat)
+    acc, steer_rate = plan2control(plan_traj_stats, curr_stat, discretization_time=sim_dt)
     return acc, steer_rate
 
 def dense_cam_poses(cam_poses, cmds):
@@ -91,6 +118,10 @@ def dense_cam_poses(cam_poses, cmds):
                 dense_poses.append(interp_pose)
                 dense_cmds.append(cmds[i])
         dense_poses.append(cam_poses[-1])
+        # The final pose needs its command too, otherwise cmds ends up one shorter than
+        # the poses and indexing it with the nearest-pose index raises IndexError as soon
+        # as the ego reaches the end of the reference trajectory.
+        dense_cmds.append(cmds[-1])
         dense_poses = np.stack(dense_poses)
         cam_poses = dense_poses
         cmds = dense_cmds

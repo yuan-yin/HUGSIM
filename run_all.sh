@@ -1,56 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
-SCENARIO_PATH=/home/yyin5/mack/datasets_mack_raw/HUGSIM-public/ss/scenarios
-
-OUTPUT_PATH=/home/yyin5/mack/yyin5/HUGSIM/outputs/benchmark_new
-
-if [ -z "${1-}" ]; then
-    echo "Error: Agent name must be provided as the first argument."
-    echo "Usage: $0 <agent_name>"
+if [ -z "${1-}" ] || [ -z "${2-}" ] || [ -z "${3-}" ]; then
+    echo "Usage: $0 <agent_name> <sim_cuda> <ad_cuda> [scenario_order] [split]"
+    echo "  scenario_order: forward (default) or reverse"
+    echo "  split:          public (default) or private"
     exit 1
 fi
-AGENT=${1}
 
+AGENT=${1}
 sim_cuda=${2}
 ad_cuda=${3}
-
-# change this variable as the scenario path on your machine
+scenario_order=${4:-forward}
+split=${5:-public}
 
 for DATASET in nuscenes kitti360 pandaset waymo; do
-    echo "--- Processing dataset: ${DATASET} ---"
-    scenario_dir=${SCENARIO_PATH}/${DATASET}
-    
-    # Check if scenario files exist to avoid errors with glob
-    if ! ls "${scenario_dir}"/*.yaml 1> /dev/null 2>&1; then
-        echo "Warning: No .yaml scenario files found in ${scenario_dir}. Skipping."
-        continue
-    fi
-
-    for cfg in "${scenario_dir}"/*.yaml; do
-        echo "Running scenario: ${cfg}"
-
-        # --- extract scene_name and mode from yaml to build output dir path ---
-        scene_name=$(grep "scene_name:" "$cfg" | sed 's/scene_name:[ ]*//' | sed 's/ //g' | sed "s/'//g")
-        mode=$(grep "mode:" "$cfg" | sed 's/mode:[ ]*//')
-
-        # --- build output dir path ---
-        out_dir="${OUTPUT_PATH}/${DATASET}_${AGENT}/${scene_name}_${mode}"
-
-        # --- skip if already exists ---
-        if [ -f "$out_dir/eval.json" ]; then
-            echo "⚠️  Output eval.json already exists, skipping: $out_dir/eval.json"
-            continue
-        fi
-
-        echo "→ Running simulation, output will be saved to: $out_dir"
-
-        CUDA_VISIBLE_DEVICES=${sim_cuda} \
-        python closed_loop_new.py --scenario_path "${cfg}" \
-                            --base_path "./configs/sim/${DATASET}_base.yaml" \
-                            --camera_path "./configs/sim/${DATASET}_camera.yaml" \
-                            --kinematic_path "./configs/sim/kinematic.yaml" \
-                            --ad "${AGENT}" \
-                            --ad_cuda ${ad_cuda}
-    done
+    ./run_dataset.sh "${AGENT}" "${DATASET}" "${sim_cuda}" "${ad_cuda}" "${scenario_order}" "${split}"
 done

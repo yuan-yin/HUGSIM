@@ -16,6 +16,10 @@ from sim.utils.score_calculator import hugsim_evaluate
 import numpy as np
 from moviepy import ImageSequenceClip
 
+# Time spacing of the waypoints the AD side returns. The tracker needs it to place the plan on a
+# timeline, and the scorer needs it to differentiate the plan into speeds/accelerations.
+PLAN_TIMESTEP = 0.5
+
 def to_video(observations, output_path):
     frames = []
     for obs in observations:
@@ -53,7 +57,16 @@ def create_gym_env(cfg, output):
         observations_save.append(obs['rgb'])
         infos_save.append(info)
 
-        print('ego pose', info['ego_pos'])
+        print(
+            'ego x={:.3f}, y={:.3f}, speed={:.3f}, steer={:.3f}, lon_accel={:.3f}, lat_accel={:.3f}'.format(
+                info["ego_box"][0],
+                info["ego_box"][1],
+                info["ego_velo"],
+                info["ego_steer"],
+                info["accelerate"],
+                info["ego_velo"] * info["ego_velo"] * np.tan(-info['ego_steer']) / 2.7
+            )
+        )
 
         with open(obs_pipe, "wb") as pipe:
             pipe.write(pickle.dumps((obs, info)))
@@ -61,32 +74,44 @@ def create_gym_env(cfg, output):
             plan_traj = pickle.loads(pipe.read())
 
         if plan_traj is not None:
-            acc, steer_rate = traj2control(plan_traj, info)
+            # The plan is expressed in the ego frame at the *current* pose, so it has to be
+            # anchored to that pose. Building the frame before env.step() keeps the recorded
+            # ego_box, obj_boxes and time_stamp in the same frame of reference as the plan.
+            imu_plan_traj = plan_traj[:, [1, 0]]
+            imu_plan_traj[:, 1] *= -1
+            global_traj = traj_transform_to_global(imu_plan_traj, info['ego_box'])
+            frame = {
+                'time_stamp': info['timestamp'],
+                'is_key_frame': True,
+                'ego_box': info['ego_box'],
+                'obj_boxes': info['obj_boxes'],
+                'obj_names': ['car' for _ in info['obj_boxes']],
+                'planned_traj': {
+                    'traj': global_traj,
+                    'timestep': PLAN_TIMESTEP
+                },
+            }
+
+            # The command is held for exactly one simulator step, so the tracker must be
+            # discretized at cfg.kinematic.dt rather than at the AD's waypoint spacing.
+            acc, steer_rate = traj2control(
+                plan_traj, info, plan_dt=PLAN_TIMESTEP, sim_dt=cfg.kinematic.dt
+            )
+            # print(plan_traj, acc, steer_rate)
 
             action = {'acc': acc, 'steer_rate': steer_rate}
             obs, reward, terminated, truncated, info = env.step(action)
             cnt += 1
             done = terminated or truncated or cnt > 400
 
+            # Episode-level bookkeeping: 'rc' is the progress reached by executing this plan,
+            # so it stays post-step (the scorer only takes its maximum over the episode).
+            frame['collision'] = info['collision']
+            frame['rc'] = info['rc']
+            save_data['frames'].append(frame)
+
         else:  # AD Side Crushed
             done = True
-
-        imu_plan_traj = plan_traj[:, [1, 0]]
-        imu_plan_traj[:, 1] *= -1
-        global_traj = traj_transform_to_global(imu_plan_traj, info['ego_box'])
-        save_data['frames'].append({
-            'time_stamp': info['timestamp'],
-            'is_key_frame': True,
-            'ego_box': info['ego_box'],
-            'obj_boxes': info['obj_boxes'],
-            'obj_names': ['car' for _ in info['obj_boxes']],
-            'planned_traj': {
-                'traj': global_traj,
-                'timestep': 0.5
-            },
-            'collision': info['collision'],
-            'rc': info['rc']
-        })
 
     with open(obs_pipe, "wb") as pipe:
         pipe.write(pickle.dumps('Done'))
@@ -130,6 +155,7 @@ if __name__ == "__main__":
 
     model_path = os.path.join(cfg.base.model_base, cfg.scenario.scene_name)
     model_config = OmegaConf.load(os.path.join(model_path, 'cfg.yaml'))
+    model_config.model_path = model_path
     cfg.update(model_config)
     
     output = os.path.join(cfg.base.output_dir, cfg.scenario.scene_name+"_"+cfg.scenario.mode)
@@ -141,6 +167,14 @@ if __name__ == "__main__":
         ad_path = cfg.base.vad_path
     elif args.ad == 'ltf':
         ad_path = cfg.base.ltf_path
+    elif args.ad.startswith('dynamo'):
+        ad_path = cfg.base.dynamo_path
+    elif args.ad == 'gtrs':
+        ad_path = cfg.base.gtrs_path
+    elif args.ad == 'ztrs':
+        ad_path = cfg.base.ztrs_path
+    elif args.ad == 'gtrs_aug':
+        ad_path = cfg.base.gtrs_aug_path
     else:
         raise NotImplementedError
     
@@ -153,5 +187,5 @@ if __name__ == "__main__":
         traceback.print_exc()
         process.kill()
     
-    # # For debug
+    # For debug
     # create_gym_env(cfg, output)

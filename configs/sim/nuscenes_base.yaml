@@ -5,7 +5,9 @@ vad_path: /home/yyin5/workspace/VAD_SIM/tools/e2e.sh
 ltf_path: /home/yyin5/workspace/NAVSIM/ltf_e2e.sh
 dynamo_path: /home/yyin5/workspace/NAVSIM/dynamo_e2e.sh
 gtrs_path: /home/yyin5/workspace/NAVSIM/gtrs_e2e.sh
-output_dir: /home/yyin5/mack/yyin5/HUGSIM/outputs/benchmark_new/nuscenes_
+ztrs_path: /home/yyin5/workspace/NAVSIM/ztrs_e2e.sh
+gtrs_aug_path: /home/yyin5/workspace/NAVSIM/gtrs_aug_e2e.sh
+output_dir: /home/yyin5/mack/yyin5/HUGSIM/outputs/benchmark_drivor_mpc/nuscenes_
 HD_map:
   path: /home/yyin5/scania/datasets_scania_raw/nuscenes
   version: nusc_trainval

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from sim.ilqr.lqr_solver import ILQRSolverParameters, ILQRWarmStartParameters, ILQRSolver
 import numpy as np
 
@@ -28,9 +30,36 @@ warm_start_params = ILQRWarmStartParameters(
 
 lqr = ILQRSolver(solver_params=solver_params, warm_start_params=warm_start_params)
 
-def plan2control(plan_traj, init_state):
+# `discretization_time` is used by the solver for three things at once: the spacing it assumes
+# between the reference poses, the integration step of its rollout, and hence the interval over
+# which the returned first input is meant to be held. It therefore has to match the interval the
+# caller actually applies the command for. Solvers are cached per discretization time; they carry
+# no state between solve() calls.
+_solvers = {solver_params.discretization_time: lqr}
+
+
+def _get_solver(discretization_time):
+    if discretization_time not in _solvers:
+        _solvers[discretization_time] = ILQRSolver(
+            solver_params=replace(solver_params, discretization_time=discretization_time),
+            warm_start_params=warm_start_params,
+        )
+    return _solvers[discretization_time]
+
+
+def plan2control(plan_traj, init_state, discretization_time=None):
+    """
+    Args:
+        plan_traj: reference states (N, [x, y, heading, velocity, steering_angle]), where
+            consecutive rows are `discretization_time` apart and row 0 is the current state.
+        init_state: current state, of the same 5-element layout.
+        discretization_time: interval the returned command will be applied for. Defaults to the
+            module-level solver parameter.
+    """
+    if discretization_time is None:
+        discretization_time = solver_params.discretization_time
     current_state = init_state
-    solutions = lqr.solve(current_state, plan_traj)
+    solutions = _get_solver(discretization_time).solve(current_state, plan_traj)
     optimal_inputs = solutions[-1].input_trajectory
     accel_cmd = optimal_inputs[0, 0]
     steering_rate_cmd = optimal_inputs[0, 1]
